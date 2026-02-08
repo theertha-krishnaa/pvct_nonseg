@@ -284,28 +284,58 @@ def main_app():
     if st.sidebar.button("Save Scan"):
         if scan_file and label_file:
             try:
-                # Read file bytes
-                scan_bytes = scan_file.read()
-                label_bytes = label_file.read()
-                
-                # Create scan name
-                scan_name = scan_file.name.replace('_image.nii.gz', '').replace('.nii.gz', '')
-                
-                # Store in session state
-                if selected_patient not in st.session_state['patients']:
-                    st.session_state['patients'][selected_patient] = {}
-                
-                st.session_state['patients'][selected_patient][scan_name] = {
-                    'image_bytes': scan_bytes,
-                    'label_bytes': label_bytes,
-                    'image_name': scan_file.name,
-                    'label_name': label_file.name
-                }
-                
-                st.sidebar.success(f"✅ Saved scan: {scan_name}")
-                st.rerun()
+                # Show progress
+                with st.sidebar.spinner("Processing files..."):
+                    # Read file bytes - don't store raw bytes, process immediately
+                    scan_bytes = scan_file.read()
+                    label_bytes = label_file.read()
+                    
+                    # Check file size (warn if too large)
+                    scan_size_mb = len(scan_bytes) / (1024 * 1024)
+                    label_size_mb = len(label_bytes) / (1024 * 1024)
+                    
+                    if scan_size_mb > 100 or label_size_mb > 100:
+                        st.sidebar.warning(f"⚠️ Large files detected ({scan_size_mb:.1f}MB + {label_size_mb:.1f}MB). Processing may be slow.")
+                    
+                    # Load volumes immediately and downsample if needed
+                    st.sidebar.info("Loading image volume...")
+                    volume = load_nifti_from_bytes(scan_bytes)
+                    
+                    st.sidebar.info("Loading label volume...")
+                    label_vol = load_nifti_from_bytes(label_bytes)
+                    
+                    # Downsample if volume is too large (>256 in any dimension)
+                    max_dim = max(volume.shape)
+                    if max_dim > 256:
+                        st.sidebar.info(f"Downsampling large volume ({volume.shape}) for memory efficiency...")
+                        factor = 256 / max_dim
+                        from scipy import ndimage
+                        volume = ndimage.zoom(volume, factor, order=1)
+                        label_vol = ndimage.zoom(label_vol, factor, order=0)  # nearest neighbor for labels
+                        st.sidebar.success(f"Downsampled to {volume.shape}")
+                    
+                    # Create scan name
+                    scan_name = scan_file.name.replace('_image.nii.gz', '').replace('.nii.gz', '')
+                    
+                    # Store processed volumes (not raw bytes) in session state
+                    if selected_patient not in st.session_state['patients']:
+                        st.session_state['patients'][selected_patient] = {}
+                    
+                    st.session_state['patients'][selected_patient][scan_name] = {
+                        'volume': volume,  # Store numpy array directly
+                        'label': label_vol.astype(np.int32),  # Store numpy array directly
+                        'image_name': scan_file.name,
+                        'label_name': label_file.name
+                    }
+                    
+                    # Clear the bytes from memory
+                    del scan_bytes, label_bytes, volume, label_vol
+                    
+                    st.sidebar.success(f"✅ Saved scan: {scan_name}")
+                    st.rerun()
             except Exception as e:
                 st.sidebar.error(f"Error saving scan: {str(e)}")
+                st.sidebar.info("Try uploading smaller files or downsampling before upload.")
         else:
             st.sidebar.error("Please upload both image and label files")
 
@@ -322,9 +352,9 @@ def main_app():
             # Load scan data from session state
             scan_data = st.session_state['patients'][selected_patient][scan_choice]
             
-            # Load volumes from bytes
-            volume = load_nifti_from_bytes(scan_data['image_bytes'])
-            label = load_nifti_from_bytes(scan_data['label_bytes']).astype(np.int32)
+            # Get volumes directly (already loaded as numpy arrays)
+            volume = scan_data['volume']
+            label = scan_data['label']
 
             st.write("Volume shape:", volume.shape)
 
