@@ -319,8 +319,22 @@ def main_app():
     if st.sidebar.button("Create Patient"):
         if patient:
             os.makedirs(os.path.join(DATA_DIR, patient), exist_ok=True)
+            st.sidebar.success(f"Created patient: {patient}")
+            st.rerun()
 
     patients = get_patients()
+    
+    # Check if there are any patients
+    if not patients:
+        st.info("👋 Welcome! To get started:")
+        st.markdown("""
+        1. **Create a patient** using the sidebar (enter a name and click 'Create Patient')
+        2. **Select the patient** from the dropdown
+        3. **Upload scan files** (.nii.gz format)
+        4. **View and analyze** the medical scans!
+        """)
+        st.stop()
+    
     selected_patient = st.sidebar.selectbox("Select Patient", patients)
 
     st.sidebar.header("Upload Scan")
@@ -328,15 +342,23 @@ def main_app():
     label_file = st.sidebar.file_uploader("Upload Label (_label.nii.gz)")
 
     if st.sidebar.button("Save Scan"):
-        if scan_file and label_file:
+        if scan_file and label_file and selected_patient:
             pdir = os.path.join(DATA_DIR, selected_patient)
             with open(os.path.join(pdir, scan_file.name), "wb") as f:
                 f.write(scan_file.getbuffer())
             with open(os.path.join(pdir, label_file.name), "wb") as f:
                 f.write(label_file.getbuffer())
             st.sidebar.success("Saved!")
+            st.rerun()
+        else:
+            st.sidebar.error("Please upload both image and label files")
 
-    scans = get_scans(selected_patient)
+    scans = get_scans(selected_patient) if selected_patient else []
+    
+    if not scans:
+        st.warning(f"No scans found for patient '{selected_patient}'. Please upload scan files using the sidebar.")
+        st.stop()
+    
     scan_choice = st.selectbox("Select Scan", scans)
 
     if scan_choice:
