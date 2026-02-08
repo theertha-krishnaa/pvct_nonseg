@@ -56,23 +56,22 @@ def login_page():
 # ---------------- HELPERS ----------------
 @st.cache_data
 def load_nifti_from_bytes(file_bytes):
-    """Load NIfTI from bytes (uploaded file)"""
-    import tempfile
-    # Create a temporary file
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.nii.gz') as tmp:
-        tmp.write(file_bytes)
-        tmp_path = tmp.name
+    """Load NIfTI from bytes (uploaded file) - pure in-memory"""
+    import gzip
     
-    # Load the NIfTI file
-    data = nib.load(tmp_path).get_fdata()
-    
-    # Clean up temp file
+    # Decompress gzip if needed
     try:
-        os.unlink(tmp_path)
+        # Try to decompress (for .nii.gz files)
+        decompressed = gzip.decompress(file_bytes)
+        file_obj = io.BytesIO(decompressed)
     except:
-        pass
+        # Not gzipped, use as-is (for .nii files)
+        file_obj = io.BytesIO(file_bytes)
     
-    return data
+    # Load using nibabel's FileHolder
+    fh = nib.FileHolder(fileobj=file_obj)
+    img = nib.Nifti1Image.from_file_map({'header': fh, 'image': fh})
+    return img.get_fdata()
 
 @st.cache_data
 def precompute_percentiles(volume):
