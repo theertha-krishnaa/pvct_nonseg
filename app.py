@@ -57,7 +57,22 @@ def login_page():
 @st.cache_data
 def load_nifti_from_bytes(file_bytes):
     """Load NIfTI from bytes (uploaded file)"""
-    return nib.load(io.BytesIO(file_bytes)).get_fdata()
+    import tempfile
+    # Create a temporary file
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.nii.gz') as tmp:
+        tmp.write(file_bytes)
+        tmp_path = tmp.name
+    
+    # Load the NIfTI file
+    data = nib.load(tmp_path).get_fdata()
+    
+    # Clean up temp file
+    try:
+        os.unlink(tmp_path)
+    except:
+        pass
+    
+    return data
 
 @st.cache_data
 def precompute_percentiles(volume):
