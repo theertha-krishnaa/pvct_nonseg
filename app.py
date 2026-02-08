@@ -71,7 +71,11 @@ def get_patients():
     return os.listdir(DATA_DIR)
 
 def get_scans(patient):
+    if patient is None:
+        return []
     folder = os.path.join(DATA_DIR, patient)
+    if not os.path.exists(folder):
+        return []
     return [f for f in os.listdir(folder) if "_image" in f]
 
 def render_slice(volume, label, view, idx, vmin, vmax, opacity):
@@ -336,6 +340,11 @@ def main_app():
         st.stop()
     
     selected_patient = st.sidebar.selectbox("Select Patient", patients)
+    
+    # Safety check
+    if not selected_patient:
+        st.warning("⚠️ Please select a patient from the dropdown")
+        st.stop()
 
     st.sidebar.header("Upload Scan")
     scan_file = st.sidebar.file_uploader("Upload CT/MRI (_image.nii.gz)")
@@ -353,7 +362,7 @@ def main_app():
         else:
             st.sidebar.error("Please upload both image and label files")
 
-    scans = get_scans(selected_patient) if selected_patient else []
+    scans = get_scans(selected_patient)
     
     if not scans:
         st.warning(f"No scans found for patient '{selected_patient}'. Please upload scan files using the sidebar.")
